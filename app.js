@@ -1,93 +1,70 @@
+/* app.js
+   Full frontend logic:
+   - backend connection check (with AbortController)
+   - login/register
+   - load/add/delete transactions
+   - chart rendering (Chart.js)
+   - offline mock fallback (demo user + demo transactions)
+*/
+
 const API_BASE = "http://127.0.0.1:5000";
 
 let currentUser = null;
 let financeApp = null;
-let connectionStatus = 'checking';
+let connectionStatus = 'checking'; // 'connected' | 'disconnected'
+let chartInstance = null;
 
-// Initialize app when DOM is loaded
-document.addEventListener('DOMContentLoaded', function() {
+document.addEventListener('DOMContentLoaded', () => {
+    // Prepare UI defaults
+    document.getElementById('loginPage').classList.remove('hidden'); // show login by default, hide loading when ready
+    document.getElementById('mainApp').style.display = 'none';
+
     checkBackendConnection();
+    setupFormListeners();
+    document.getElementById("loginEmail").value = "demo@financetracker.com";
+    document.getElementById("loginPassword").value = "demo123";
 });
 
-// Check if backend is running
 async function checkBackendConnection() {
+    // Use AbortController for timeout
+    const controller = new AbortController();
+    const timeout = setTimeout(() => controller.abort(), 4000);
+
     try {
-        const response = await fetch(API_BASE + '/health', { 
-            method: 'GET',
-            timeout: 5000 
-        });
-        
-        if (response.ok) {
+        const res = await fetch(`${API_BASE}/health`, { signal: controller.signal });
+        clearTimeout(timeout);
+        if (res.ok) {
             connectionStatus = 'connected';
             hideLoading();
         } else {
-            throw new Error('Backend not responding');
+            connectionStatus = 'disconnected';
+            console.warn('Health returned non-ok, switching to offline mode');
+            hideLoading();
         }
-    } catch (error) {
-        console.warn('Backend connection failed, continuing with frontend-only mode');
+    } catch (err) {
         connectionStatus = 'disconnected';
+        console.warn('Backend connection failed, continuing with frontend-only mode', err);
         hideLoading();
     }
 }
 
 function hideLoading() {
-    document.getElementById('loadingScreen').classList.add('hidden');
-    document.getElementById('loginPage').classList.remove('hidden');
-    
-    // Add connection status indicator
+    const loading = document.getElementById('loadingScreen');
+    if (loading) loading.classList.add('hidden');
+
+    const login = document.getElementById('loginPage');
+    if (login) login.classList.remove('hidden');
+
+    // connection status badge
     const statusDiv = document.createElement('div');
     statusDiv.className = `connection-status ${connectionStatus}`;
-    statusDiv.textContent = connectionStatus === 'connected' ? 
-        'Backend Connected' : 'Offline Mode';
+    statusDiv.textContent = connectionStatus === 'connected' ? 'Backend Connected' : 'Offline Mode';
     document.body.appendChild(statusDiv);
 }
 
-// Tab switching between Login and Register forms
-function switchTab(tab) {
-    const loginForm = document.getElementById("loginForm");
-    const registerForm = document.getElementById("registerForm");
-    const loginTab = document.querySelector(".auth-tab:nth-child(1)");
-    const registerTab = document.querySelector(".auth-tab:nth-child(2)");
-    const errorMessage = document.getElementById("errorMessage");
-    const successMessage = document.getElementById("successMessage");
-
-    errorMessage.style.display = "none";
-    successMessage.style.display = "none";
-
-    if (tab === "login") {
-        loginForm.classList.remove("hidden");
-        registerForm.classList.add("hidden");
-        loginTab.classList.add("active");
-        registerTab.classList.remove("active");
-    } else {
-        loginForm.classList.add("hidden");
-        registerForm.classList.remove("hidden");
-        loginTab.classList.remove("active");
-        registerTab.classList.add("active");
-    }
-}
-
-// Show error message
-function showError(message) {
-    const errorEl = document.getElementById("errorMessage");
-    errorEl.textContent = message;
-    errorEl.style.display = "block";
-    setTimeout(() => {
-        errorEl.style.display = "none";
-    }, 5000);
-}
-
-// Show success message
-function showSuccess(message) {
-    const successEl = document.getElementById("successMessage");
-    successEl.textContent = message;
-    successEl.style.display = "block";
-    setTimeout(() => {
-        successEl.style.display = "none";
-    }, 5000);
-}
-
-// API call helper function with fallback to mock data
+/* ---------------------------
+   Helper: API request (with fallback)
+   --------------------------- */
 async function apiRequest(url, method = "GET", body = null) {
     if (connectionStatus === 'connected') {
         try {
@@ -97,16 +74,14 @@ async function apiRequest(url, method = "GET", body = null) {
             };
             if (body) options.body = JSON.stringify(body);
 
-            const response = await fetch(API_BASE + url, options);
-            const data = await response.json();
-
-            if (!response.ok) {
-                throw new Error(data.error || `HTTP Error ${response.status}`);
+            const res = await fetch(API_BASE + url, options);
+            const data = await res.json().catch(() => ({}));
+            if (!res.ok) {
+                throw new Error(data.error || `HTTP ${res.status}`);
             }
-
             return data;
-        } catch (error) {
-            console.warn(`API request failed: ${error.message}`);
+        } catch (err) {
+            console.warn('API request failed, switching to offline mock:', err.message || err);
             connectionStatus = 'disconnected';
             return handleMockRequest(url, method, body);
         }
@@ -115,128 +90,127 @@ async function apiRequest(url, method = "GET", body = null) {
     }
 }
 
-// Mock data handler for offline functionality
+/* ---------------------------
+   Mock data handler (offline support)
+   --------------------------- */
 function handleMockRequest(url, method, body) {
-    const mockData = getMockData();
-    
+    const mock = getMockData();
+
+    // Login
     if (url === '/login' && method === 'POST') {
-        const { email, password } = body;
+        const { email, password } = body || {};
         if (email === 'demo@financetracker.com' && password === 'demo123') {
-            return {
-                id: '1',
-                name: 'Demo User',
-                email: email
-            };
+            return { id: '1', name: 'Demo User', email: email };
         }
         throw new Error('Invalid credentials');
     }
-    
+
+    // Register
     if (url === '/register' && method === 'POST') {
         return { message: 'Registration successful (mock mode)' };
     }
-    
-    if (url === '/transactions/1' && method === 'GET') {
-        return mockData.transactions;
+
+    // Get transactions
+    if (url.startsWith('/transactions/') && method === 'GET') {
+        return mock.transactions;
     }
-    
-    if (url === '/transactions/1' && method === 'POST') {
+
+    // Add transaction
+    if (url.startsWith('/transactions/') && method === 'POST') {
         const newTransaction = {
             id: Date.now().toString(),
+            user_id: '1',
             ...body,
             timestamp: new Date().toISOString()
         };
-        mockData.transactions.unshift(newTransaction);
+        mock.transactions.unshift(newTransaction);
         return newTransaction;
     }
-    
-    if (url.startsWith('/transactions/1') && method === 'DELETE') {
-        const transactionId = new URLSearchParams(url.split('?')[1]).get('id');
-        const index = mockData.transactions.findIndex(t => t.id === transactionId);
-        if (index !== -1) {
-            mockData.transactions.splice(index, 1);
+
+    // Delete transaction
+    if (url.startsWith('/transactions/') && method === 'DELETE') {
+        const params = new URLSearchParams(url.split('?')[1] || '');
+        const id = params.get('id');
+        const idx = mock.transactions.findIndex(t => t.id === id);
+        if (idx >= 0) {
+            mock.transactions.splice(idx, 1);
             return { message: 'Transaction deleted' };
         }
-        throw new Error('Transaction not found');
+        throw new Error('Transaction not found (mock)');
     }
-    
-    throw new Error('Mock endpoint not found');
+
+    // Categories
+    if (url === '/categories' && method === 'GET') {
+        return {
+            income: ["Salary", "Freelance", "Investment", "Gift", "Other Income"],
+            expense: ["Food", "Transportation", "Utilities", "Entertainment", "Healthcare", "Shopping", "Rent", "Other"]
+        };
+    }
+
+    throw new Error('Mock endpoint not found: ' + url);
 }
 
-// Get mock data
 function getMockData() {
     if (!window.mockData) {
         window.mockData = {
             transactions: [
-                {
-                    id: "1",
-                    description: "Monthly Salary",
-                    amount: 5000,
-                    type: "income",
-                    category: "Salary",
-                    date: "2025-09-01",
-                    timestamp: new Date().toISOString()
-                },
-                {
-                    id: "2",
-                    description: "Grocery Shopping",
-                    amount: 150,
-                    type: "expense",
-                    category: "Food",
-                    date: "2025-09-02",
-                    timestamp: new Date().toISOString()
-                },
-                {
-                    id: "3",
-                    description: "Gas Bill",
-                    amount: 80,
-                    type: "expense",
-                    category: "Utilities",
-                    date: "2025-09-01",
-                    timestamp: new Date().toISOString()
-                },
-                {
-                    id: "4",
-                    description: "Coffee Shop",
-                    amount: 25,
-                    type: "expense",
-                    category: "Food",
-                    date: "2025-09-02",
-                    timestamp: new Date().toISOString()
-                },
-                {
-                    id: "5",
-                    description: "Freelance Project",
-                    amount: 800,
-                    type: "income",
-                    category: "Freelance",
-                    date: "2025-08-30",
-                    timestamp: new Date().toISOString()
-                },
-                {
-                    id: "6",
-                    description: "Restaurant Dinner",
-                    amount: 85,
-                    type: "expense",
-                    category: "Food",
-                    date: "2025-08-29",
-                    timestamp: new Date().toISOString()
-                },
-                {
-                    id: "7",
-                    description: "Transportation",
-                    amount: 45,
-                    type: "expense",
-                    category: "Transportation",
-                    date: "2025-08-28",
-                    timestamp: new Date().toISOString()
-                }
+                { id: "1", user_id: "1", description: "Monthly Salary", amount: 5000, type: "income", category: "Salary", date: "2025-09-01", timestamp: new Date().toISOString() },
+                { id: "2", user_id: "1", description: "Grocery Shopping", amount: 150, type: "expense", category: "Food", date: "2025-09-02", timestamp: new Date().toISOString() },
+                { id: "3", user_id: "1", description: "Gas Bill", amount: 80, type: "expense", category: "Utilities", date: "2025-09-01", timestamp: new Date().toISOString() },
+                { id: "4", user_id: "1", description: "Coffee Shop", amount: 25, type: "expense", category: "Food", date: "2025-09-02", timestamp: new Date().toISOString() },
+                { id: "5", user_id: "1", description: "Freelance Project", amount: 800, type: "income", category: "Freelance", date: "2025-08-30", timestamp: new Date().toISOString() }
             ]
         };
     }
     return window.mockData;
 }
 
-// Handle user login
+/* ---------------------------
+   UI helpers
+   --------------------------- */
+function showError(msg) {
+    const el = document.getElementById('errorMessage');
+    el.textContent = msg;
+    el.style.display = 'block';
+    setTimeout(() => { el.style.display = 'none'; }, 5000);
+}
+
+function showSuccess(msg) {
+    const el = document.getElementById('successMessage');
+    el.textContent = msg;
+    el.style.display = 'block';
+    setTimeout(() => { el.style.display = 'none'; }, 4000);
+}
+
+/* ---------------------------
+   Auth: login / register
+   --------------------------- */
+function setupFormListeners() {
+    document.getElementById("loginForm").addEventListener("submit", async (e) => {
+        e.preventDefault();
+        await handleLogin();
+    });
+
+    document.getElementById("registerForm").addEventListener("submit", async (e) => {
+        e.preventDefault();
+        await handleRegister();
+    });
+
+    document.getElementById("transactionForm").addEventListener("submit", (e) => {
+        e.preventDefault();
+        if (financeApp) financeApp.addTransaction();
+    });
+
+    document.getElementById("type").addEventListener("change", (e) => {
+        if (financeApp) financeApp.populateCategories(e.target.value);
+    });
+
+    ["filterType","filterCategory","filterDateFrom","filterDateTo"].forEach(id => {
+        const el = document.getElementById(id);
+        if (el) el.addEventListener('change', () => { if (financeApp) financeApp.updateDisplay(); });
+    });
+}
+
 async function handleLogin() {
     const email = document.getElementById("loginEmail").value.trim();
     const password = document.getElementById("loginPassword").value.trim();
@@ -248,33 +222,31 @@ async function handleLogin() {
 
     try {
         const user = await apiRequest("/login", "POST", { email, password });
+        // apiRequest returns thrown Error on failure; else it returns user object.
         currentUser = user;
+        localStorage.setItem('ft_user', JSON.stringify(user));
         showMainApp();
-    } catch (error) {
-        showError(error.message);
+    } catch (err) {
+        showError(err.message || String(err));
     }
 }
 
-// Handle user registration
 async function handleRegister() {
     const userData = {
         name: document.getElementById("registerName").value.trim(),
         email: document.getElementById("registerEmail").value.trim(),
         password: document.getElementById("registerPassword").value,
-        confirmPassword: document.getElementById("confirmPassword").value,
+        confirmPassword: document.getElementById("confirmPassword").value
     };
 
-    // Client-side validation
     if (!userData.name || !userData.email || !userData.password) {
         showError("Please fill in all fields");
         return;
     }
-
     if (userData.password !== userData.confirmPassword) {
         showError("Passwords do not match");
         return;
     }
-
     if (userData.password.length < 6) {
         showError("Password must be at least 6 characters long");
         return;
@@ -282,131 +254,91 @@ async function handleRegister() {
 
     try {
         await apiRequest("/register", "POST", userData);
-        showSuccess("Account created successfully! You can now sign in.");
-        switchTab("login");
+        showSuccess("Account created successfully! Please sign in.");
+        switchTab('login');
         document.getElementById("loginEmail").value = userData.email;
-    } catch (error) {
-        showError(error.message);
+    } catch (err) {
+        showError(err.message || String(err));
     }
 }
 
-// Show main app UI and initialize finance app
-function showMainApp() {
-    document.getElementById("loginPage").style.display = "none";
-    document.getElementById("mainApp").style.display = "block";
-    document.getElementById("userWelcome").textContent = `Welcome, ${currentUser.name}!`;
+/* ---------------------------
+   UI: tabs, logout, etc.
+   --------------------------- */
+function switchTab(tab) {
+    const loginForm = document.getElementById("loginForm");
+    const registerForm = document.getElementById("registerForm");
+    const loginTab = document.querySelector(".auth-tab:nth-child(1)");
+    const registerTab = document.querySelector(".auth-tab:nth-child(2)");
+    const errorMessage = document.getElementById("errorMessage");
+    const successMessage = document.getElementById("successMessage");
 
-    if (financeApp) {
-        financeApp.updateDisplay();
+    if (errorMessage) errorMessage.style.display = "none";
+    if (successMessage) successMessage.style.display = "none";
+
+    if (tab === "login") {
+        loginForm.classList.remove("hidden");
+        registerForm.classList.add("hidden");
+        if (loginTab) loginTab.classList.add("active");
+        if (registerTab) registerTab.classList.remove("active");
     } else {
-        financeApp = new FinanceApp(currentUser);
+        loginForm.classList.add("hidden");
+        registerForm.classList.remove("hidden");
+        if (loginTab) loginTab.classList.remove("active");
+        if (registerTab) registerTab.classList.add("active");
     }
 }
 
-// Logout user
 function logout() {
     currentUser = null;
     financeApp = null;
+    localStorage.removeItem('ft_user');
     document.getElementById("mainApp").style.display = "none";
     document.getElementById("loginPage").style.display = "block";
-    switchTab("login");
+    switchTab('login');
     document.getElementById("loginForm").reset();
     document.getElementById("registerForm").reset();
-    
-    // Reset to demo credentials
     document.getElementById("loginEmail").value = "demo@financetracker.com";
     document.getElementById("loginPassword").value = "demo123";
 }
 
-// Clear all filters
-function clearFilters() {
-    document.getElementById("filterType").value = "";
-    document.getElementById("filterCategory").value = "";
-    document.getElementById("filterDate").value = "";
-    if (financeApp) {
-        financeApp.updateDisplay();
-    }
-}
-
-// Finance App Class
+/* ---------------------------
+   FinanceApp class
+   --------------------------- */
 class FinanceApp {
     constructor(user) {
         this.user = user;
-        this.chart = null;
         this.allTransactions = [];
+        this.chart = null;
         this.categories = {
             income: ["Salary", "Freelance", "Investment", "Gift", "Other Income"],
-            expense: [
-                "Food",
-                "Transportation",
-                "Utilities",
-                "Entertainment",
-                "Healthcare",
-                "Shopping",
-                "Rent",
-                "Other",
-            ],
+            expense: ["Food","Transportation","Utilities","Entertainment","Healthcare","Shopping","Rent","Other"]
         };
         this.initializeApp();
     }
 
     async initializeApp() {
-        this.setupEventListeners();
-        this.populateCategories();
+        this.populateCategories(); // populate filter & default category list
         this.setDefaultDate();
-        
         await this.loadTransactions();
         this.setupChart();
         this.updateDisplay();
     }
 
-    setupEventListeners() {
-        document.getElementById("transactionForm").addEventListener("submit", (e) => {
-            e.preventDefault();
-            this.addTransaction();
-        });
-
-        document.getElementById("type").addEventListener("change", (e) => {
-            this.populateCategories(e.target.value);
-        });
-
-        ["filterType", "filterCategory", "filterDate"].forEach((id) => {
-            document.getElementById(id).addEventListener("change", () => {
-                this.updateDisplay();
-            });
-        });
-    }
-
-    populateCategories(type = null) {
-        const categorySelect = document.getElementById("category");
-        const filterCategorySelect = document.getElementById("filterCategory");
-
-        categorySelect.innerHTML = '<option value="">Select Category</option>';
-
-        if (type && this.categories[type]) {
-            this.categories[type].forEach((cat) => {
-                categorySelect.innerHTML += `<option value="${cat}">${cat}</option>`;
-            });
-        }
-
-        const allCategories = [...new Set([...this.categories.income, ...this.categories.expense])];
-        filterCategorySelect.innerHTML = '<option value="">All Categories</option>';
-        allCategories.forEach((cat) => {
-            filterCategorySelect.innerHTML += `<option value="${cat}">${cat}</option>`;
-        });
-    }
-
     setDefaultDate() {
-        const today = new Date().toISOString().split("T")[0];
-        document.getElementById("date").value = today;
+        const today = new Date().toISOString().split('T')[0];
+        const dateInput = document.getElementById('date');
+        if (dateInput) dateInput.value = today;
     }
 
     async loadTransactions() {
         try {
-            this.allTransactions = await apiRequest(`/transactions/${this.user.id}`, "GET");
+            const tx = await apiRequest(`/transactions/${this.user.id}`, "GET");
+            // ensure array
+            this.allTransactions = Array.isArray(tx) ? tx : [];
             console.log("Loaded transactions:", this.allTransactions.length);
-        } catch (error) {
-            console.error("Failed to load transactions:", error);
+        } catch (err) {
+            console.error("Failed to load transactions:", err);
             this.allTransactions = [];
             this.showNotification("Failed to load transactions", "error");
         }
@@ -418,7 +350,7 @@ class FinanceApp {
             amount: parseFloat(document.getElementById("amount").value),
             type: document.getElementById("type").value,
             category: document.getElementById("category").value,
-            date: document.getElementById("date").value,
+            date: document.getElementById("date").value
         };
 
         if (!formData.description || !formData.amount || !formData.type || !formData.category || !formData.date) {
@@ -426,256 +358,277 @@ class FinanceApp {
             return;
         }
 
-        if (formData.amount <= 0) {
-            this.showNotification("Amount must be greater than 0", "error");
+        if (isNaN(formData.amount) || formData.amount <= 0) {
+            this.showNotification("Amount must be a positive number", "error");
             return;
         }
 
         try {
-            const newTransaction = await apiRequest(`/transactions/${this.user.id}`, "POST", formData);
-            this.allTransactions.unshift(newTransaction);
+            const newTx = await apiRequest(`/transactions/${this.user.id}`, "POST", formData);
+            // some backends return created object, ensure consistent format
+            this.allTransactions.unshift(newTx);
             this.clearForm();
             this.updateDisplay();
             this.showNotification("Transaction added successfully!", "success");
-        } catch (error) {
-            this.showNotification(error.message, "error");
+        } catch (err) {
+            this.showNotification(err.message || String(err), "error");
         }
     }
 
     clearForm() {
         document.getElementById("transactionForm").reset();
         this.setDefaultDate();
+        // reset category to default
         document.getElementById("category").innerHTML = '<option value="">Select Category</option>';
+        this.populateCategories();
     }
 
     async deleteTransaction(id) {
         if (!confirm("Are you sure you want to delete this transaction?")) return;
-
         try {
             await apiRequest(`/transactions/${this.user.id}?id=${id}`, "DELETE");
             this.allTransactions = this.allTransactions.filter(t => t.id !== id);
             this.updateDisplay();
             this.showNotification("Transaction deleted successfully!", "success");
-        } catch (error) {
-            this.showNotification(error.message, "error");
+        } catch (err) {
+            this.showNotification(err.message || String(err), "error");
         }
+    }
+
+    populateCategories(type = null) {
+        const categorySelect = document.getElementById("category");
+        const filterCategorySelect = document.getElementById("filterCategory");
+        if (!categorySelect || !filterCategorySelect) return;
+
+        categorySelect.innerHTML = '<option value="">Select Category</option>';
+        const allCategories = Array.from(new Set([...this.categories.income, ...this.categories.expense]));
+
+        if (type && this.categories[type]) {
+            this.categories[type].forEach(cat => {
+                categorySelect.innerHTML += `<option value="${cat}">${cat}</option>`;
+            });
+        } else {
+            // default show income categories first
+            this.categories.income.forEach(cat => {
+                categorySelect.innerHTML += `<option value="${cat}">${cat}</option>`;
+            });
+        }
+
+        // populate filter categories (unique)
+        filterCategorySelect.innerHTML = '<option value="">All Categories</option>';
+        allCategories.forEach(cat => {
+            filterCategorySelect.innerHTML += `<option value="${cat}">${cat}</option>`;
+        });
     }
 
     getFilteredTransactions() {
         const typeFilter = document.getElementById("filterType").value;
         const categoryFilter = document.getElementById("filterCategory").value;
-        const monthFilter = document.getElementById("filterDate").value;
+        const dateFromFilter = document.getElementById("filterDateFrom").value;
+        const dateToFilter = document.getElementById("filterDateTo").value;
 
         let filtered = [...this.allTransactions];
 
-        if (typeFilter) {
-            filtered = filtered.filter((t) => t.type === typeFilter);
-        }
-
-        if (categoryFilter) {
-            filtered = filtered.filter((t) => t.category === categoryFilter);
-        }
-
-        if (monthFilter) {
-            filtered = filtered.filter((t) => t.date.startsWith(monthFilter));
-        }
-
+        if (typeFilter) filtered = filtered.filter(t => t.type === typeFilter);
+        if (categoryFilter) filtered = filtered.filter(t => t.category === categoryFilter);
+        if (dateFromFilter) filtered = filtered.filter(t => t.date >= dateFromFilter);
+        if (dateToFilter) filtered = filtered.filter(t => t.date <= dateToFilter);
         return filtered;
     }
 
     updateDisplay() {
-        const filteredTransactions = this.getFilteredTransactions();
-        this.renderStats(filteredTransactions);
-        this.renderTransactions(filteredTransactions);
-        this.updateChart(filteredTransactions);
+        const filtered = this.getFilteredTransactions();
+        this.renderStats(filtered);
+        this.renderTransactions(filtered);
+        this.updateChart(filtered);
     }
 
     renderStats(transactions) {
-        const income = transactions
-            .filter((t) => t.type === "income")
-            .reduce((sum, t) => sum + parseFloat(t.amount), 0);
-
-        const expenses = transactions
-            .filter((t) => t.type === "expense")
-            .reduce((sum, t) => sum + parseFloat(t.amount), 0);
-
+        const income = transactions.filter(t => t.type === 'income').reduce((s,t) => s + parseFloat(t.amount), 0);
+        const expenses = transactions.filter(t => t.type === 'expense').reduce((s,t) => s + parseFloat(t.amount), 0);
         const balance = income - expenses;
         const savingsRate = income > 0 ? (balance / income) * 100 : 0;
 
         document.getElementById("totalIncome").textContent = this.formatCurrency(income);
         document.getElementById("totalExpenses").textContent = this.formatCurrency(expenses);
-        document.getElementById("netBalance").textContent = this.formatCurrency(balance);
+        const netBalanceEl = document.getElementById("netBalance");
+        netBalanceEl.textContent = this.formatCurrency(balance);
+        netBalanceEl.className = `stat-value ${balance >= 0 ? 'income' : 'expenses'}`;
         document.getElementById("savingsRate").textContent = savingsRate.toFixed(1) + "%";
-
-        const balanceElement = document.getElementById("netBalance");
-        balanceElement.className = `stat-value ${balance >= 0 ? "income" : "expenses"}`;
     }
 
     renderTransactions(transactions) {
-        const listElement = document.getElementById("transactionList");
+        const list = document.getElementById("transactionList");
+        if (!list) return;
 
-        if (transactions.length === 0) {
-            listElement.innerHTML = '<div class="no-transactions">No transactions found matching your filters.</div>';
+        if (!transactions || transactions.length === 0) {
+            list.innerHTML = '<div class="no-transactions">No transactions found matching your filters.</div>';
             return;
         }
 
-        listElement.innerHTML = transactions
-            .sort((a, b) => new Date(b.date) - new Date(a.date))
-            .map((transaction) => `
+        list.innerHTML = transactions
+            .sort((a,b) => new Date(b.date || b.timestamp) - new Date(a.date || a.timestamp))
+            .map(t => `
                 <div class="transaction-item">
                     <div class="transaction-info">
-                        <div class="transaction-description">${transaction.description}</div>
-                        <div class="transaction-details">
-                            ${transaction.category} • ${this.formatDate(transaction.date)}
-                        </div>
+                        <div class="transaction-description">${t.description}</div>
+                        <div class="transaction-details">${t.category} • ${this.formatDate(t.date)}</div>
                     </div>
-                    <div class="transaction-amount ${transaction.type}">
-                        ${transaction.type === "income" ? "+" : "-"}${this.formatCurrency(parseFloat(transaction.amount))}
+                    <div style="display:flex; align-items:center; gap:8px;">
+                        <div class="transaction-amount ${t.type}">${t.type === 'income' ? '+' : '-'}${this.formatCurrency(parseFloat(t.amount))}</div>
+                        <button class="btn-delete" onclick="financeApp.deleteTransaction('${t.id}')">🗑️</button>
                     </div>
-                    <button class="btn btn-delete" onclick="financeApp.deleteTransaction('${transaction.id}')">
-                        🗑️
-                    </button>
                 </div>
-            `).join("");
+            `).join('');
     }
 
     setupChart() {
         const canvas = document.getElementById("expenseChart");
         if (!canvas) {
-            console.error("Chart canvas not found!");
+            console.error("Chart canvas not found");
             return;
         }
-        
-        const ctx = canvas.getContext("2d");
-        
-        try {
-            this.chart = new Chart(ctx, {
-                type: "doughnut",
-                data: {
-                    labels: [],
-                    datasets: [{
-                        data: [],
-                        backgroundColor: [
-                            "#FF6384", "#36A2EB", "#FFCE56", "#4BC0C0",
-                            "#9966FF", "#FF9F40", "#FF8C00", "#32CD32",
-                            "#FFB6C1", "#87CEEB"
-                        ],
-                        borderWidth: 2,
-                        borderColor: "#fff",
-                        hoverBorderWidth: 3
-                    }],
-                },
-                options: {
-                    responsive: true,
-                    maintainAspectRatio: false,
-                    plugins: {
-                        legend: {
-                            position: "bottom",
-                            labels: {
-                                padding: 15,
-                                usePointStyle: true,
-                                font: {
-                                    size: 12
-                                }
-                            },
-                        },
-                        tooltip: {
-                            callbacks: {
-                                label: function(context) {
-                                    const label = context.label || '';
-                                    const value = context.parsed;
-                                    const total = context.dataset.data.reduce((a, b) => a + b, 0);
-                                    const percentage = total > 0 ? ((value / total) * 100).toFixed(1) : 0;
-                                    return `${label}: $${value.toFixed(2)} (${percentage}%)`;
-                                }
-                            }
-                        }
-                    },
-                },
-            });
-            console.log("Chart initialized successfully");
-        } catch (error) {
-            console.error("Chart initialization failed:", error);
+        // Chart will be created/updated by updateChart; initialize empty instance placeholder
+        if (chartInstance) {
+            try { chartInstance.destroy(); } catch(e){}
+            chartInstance = null;
         }
     }
 
     updateChart(transactions) {
-        if (!this.chart) {
-            console.error("Chart not initialized");
-            return;
-        }
-
-        const expensesByCategory = {};
-        
-        transactions
-            .filter((t) => t.type === "expense")
-            .forEach((t) => {
-                const amount = parseFloat(t.amount);
-                if (!isNaN(amount) && amount > 0) {
-                    expensesByCategory[t.category] = (expensesByCategory[t.category] || 0) + amount;
-                }
-            });
-
-        const labels = Object.keys(expensesByCategory);
-        const data = Object.values(expensesByCategory);
-
-        this.chart.data.labels = labels;
-        this.chart.data.datasets[0].data = data;
-        
-        try {
-            this.chart.update();
-        } catch (error) {
-            console.error("Chart update failed:", error);
-        }
-
+        const ctx = document.getElementById("expenseChart");
         const chartMessage = document.getElementById("chartMessage");
-        if (data.length === 0 || data.every(val => val === 0)) {
-            chartMessage.style.display = "block";
+        if (!ctx) return;
+
+        // get expense totals by category
+        const expenses = (transactions || []).filter(t => t.type === 'expense');
+        const totals = {};
+        expenses.forEach(t => {
+            const amt = parseFloat(t.amount) || 0;
+            if (!totals[t.category]) totals[t.category] = 0;
+            totals[t.category] += amt;
+        });
+
+        const labels = Object.keys(totals);
+        const data = Object.values(totals);
+
+        if (!labels.length || data.every(v => v === 0)) {
+            if (chartMessage) chartMessage.style.display = 'block';
+            if (chartInstance) { try { chartInstance.destroy(); } catch(e){} chartInstance = null; }
+            return;
         } else {
-            chartMessage.style.display = "none";
+            if (chartMessage) chartMessage.style.display = 'none';
         }
-    }
 
-    formatCurrency(amount) {
-        return new Intl.NumberFormat("en-US", {
-            style: "currency",
-            currency: "USD",
-        }).format(amount);
-    }
+        // destroy existing chart
+        if (chartInstance) {
+            try { chartInstance.destroy(); } catch (e) { console.warn(e); }
+            chartInstance = null;
+        }
 
-    formatDate(dateString) {
-        return new Date(dateString).toLocaleDateString("en-US", {
-            year: "numeric",
-            month: "short",
-            day: "numeric",
+        const ctx2d = ctx.getContext('2d');
+        chartInstance = new Chart(ctx2d, {
+            type: 'doughnut',
+            data: {
+                labels,
+                datasets: [{
+                    label: 'Expenses',
+                    data,
+                    // nice default colors
+                    backgroundColor: [
+                        "#FF6384", "#36A2EB", "#FFCE56", "#4BC0C0",
+                        "#9966FF", "#FF9F40", "#FF8C00", "#32CD32",
+                        "#FFB6C1", "#87CEEB"
+                    ],
+                    borderWidth: 1
+                }]
+            },
+            options: {
+                responsive: true,
+                maintainAspectRatio: false,
+                plugins: {
+                    legend: { position: 'bottom' },
+                    tooltip: {
+                        callbacks: {
+                            label: function(context) {
+                                const label = context.label || '';
+                                const value = context.parsed || 0;
+                                const total = context.dataset.data.reduce((a,b) => a + b, 0);
+                                const percent = total > 0 ? ((value/total)*100).toFixed(1) : 0;
+                                return `${label}: ${formatCurrency(value)} (${percent}%)`;
+                            }
+                        }
+                    }
+                }
+            }
         });
     }
 
-    showNotification(message, type = "info") {
-        const notification = document.createElement("div");
-        notification.className = `notification ${type}`;
-        notification.textContent = message;
-        document.body.appendChild(notification);
+    formatCurrency(amount) {
+        return new Intl.NumberFormat("en-US", { style:"currency", currency:"USD" }).format(amount || 0);
+    }
 
-        setTimeout(() => {
-            notification.remove();
-        }, 3000);
+    formatDate(dateString) {
+        if (!dateString) return '';
+        try {
+            const d = new Date(dateString);
+            return d.toLocaleDateString("en-US", { year:'numeric', month:'short', day:'numeric' });
+        } catch (e) {
+            return dateString;
+        }
+    }
+
+    showNotification(message, type = "info") {
+        const n = document.createElement('div');
+        n.className = `notification ${type}`;
+        n.textContent = message;
+        document.body.appendChild(n);
+        setTimeout(() => n.remove(), 3000);
     }
 }
 
-// Event Listeners
-document.getElementById("loginForm").addEventListener("submit", (e) => {
-    e.preventDefault();
-    handleLogin();
-});
+/* ---------------------------
+   Connect UI to app
+   --------------------------- */
+function showMainApp() {
+    document.getElementById("loginPage").style.display = "none";
+    document.getElementById("mainApp").style.display = "block";
+    document.getElementById("userWelcome").textContent = `Welcome, ${currentUser.name}!`;
 
-document.getElementById("registerForm").addEventListener("submit", (e) => {
-    e.preventDefault();
-    handleRegister();
-});
+    if (financeApp) {
+        financeApp.updateDisplay();
+    } else {
+        financeApp = new FinanceApp(currentUser);
+        // attach to window for use in inline onclick handlers
+        window.financeApp = financeApp;
+    }
+}
 
-// Global functions
-window.logout = logout;
+/* Clear filters */
+function clearFilters() {
+    document.getElementById("filterType").value = "";
+    document.getElementById("filterCategory").value = "";
+    document.getElementById("filterDateFrom").value = "";
+    document.getElementById("filterDateTo").value = "";
+    if (financeApp) financeApp.updateDisplay();
+}
+
+/* Expose global functions */
 window.switchTab = switchTab;
+window.logout = logout;
 window.clearFilters = clearFilters;
-window.financeApp = null;
+window.financeApp = financeApp;
+
+// If a user was saved in localStorage, auto-sign-in (demo behavior)
+(function tryAutoSignIn() {
+    const saved = localStorage.getItem('ft_user');
+    if (saved) {
+        try {
+            currentUser = JSON.parse(saved);
+            // small delay to allow connection check to run
+            setTimeout(() => {
+                showMainApp();
+            }, 300);
+        } catch (e) { /* ignore */ }
+    }
+})();
