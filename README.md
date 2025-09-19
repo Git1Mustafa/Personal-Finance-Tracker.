@@ -1,161 +1,156 @@
-# Personal Finance Tracker
-
+Personal Finance Tracker
 A comprehensive web application for managing personal finances with real-time data visualization, transaction management, and user authentication.
 
-## Features
+Features
+🔐 Authentication System
+User registration and login
 
-### 🔐 **Authentication System**
-- User registration and login
-- Secure password hashing
-- Demo account included
+Secure password hashing
 
-### 💰 **Financial Management**
-- Add income and expense transactions
-- Categorize transactions (Food, Transportation, Utilities, etc.)
-- Real-time balance calculations
-- Savings rate tracking
+Demo account included
 
-### 📊 **Data Visualization**
-- Interactive spending overview chart (Chart.js)
-- Category-wise expense breakdown
-- Visual financial statistics
+💰 Financial Management
+Add income and expense transactions
 
-### 🔍 **Advanced Features**
-- Filter transactions by type, category, and date
-- Search and sort functionality
-- Responsive design for all devices
-- Offline mode with mock data
+Categorize transactions (Food, Transportation, Utilities, etc.)
 
-## Tech Stack
+Real-time balance calculations
 
-### Frontend
-- **HTML5** - Semantic markup
-- **CSS3** - Modern styling with Flexbox/Grid
-- **JavaScript (ES6+)** - Dynamic functionality
-- **Chart.js** - Data visualization library
+Savings rate tracking
 
-### Backend
-- **Flask** - Python web framework
-- **SQLAlchemy** - Database ORM
-- **SQLite** - Lightweight database
-- **Flask-CORS** - Cross-origin resource sharing
+📊 Data Visualization
+Interactive spending overview chart (Chart.js)
 
-## Installation & Setup
+Category-wise expense breakdown
 
-### Prerequisites
-- Python 3.8+
-- Modern web browser
+Visual financial statistics
 
-### Backend Setup
-1. **Clone the repository**
+🔍 Advanced Features
+Filter transactions by type, category, and customizable date range (From Date - To Date)
+
+Search and sort functionality
+
+Responsive design for all devices
+
+Offline mode with mock data fallback
+
+Tech Stack
+Frontend
+HTML5 - Semantic markup
+
+CSS3 - Modern styling with Flexbox/Grid
+
+JavaScript (ES6+) - Dynamic functionality and API integration
+
+Chart.js - Data visualization library
+
+Backend
+Flask - Python web framework
+
+SQLAlchemy - ORM database access
+
+SQLite - Lightweight database
+
+Flask-CORS - Cross-origin resource sharing
+
+Installation & Setup
+Prerequisites
+Python 3.8+
+
+Modern web browser
+
+Backend Setup
+# Clone the repository
 git clone https://github.com/yourusername/personal-finance-tracker.git
 cd personal-finance-tracker
 
-2. **Install dependencies**
+# Install dependencies
 pip install -r requirements.txt
 
-3. **Run the Flask server**
+# Run the Flask server
 python app.py
 
-4. **Server will start on**
-http://127.0.0.1:5000
+# Backend runs at http://127.0.0.1:5000
+Frontend Setup
+Open index.html in a modern browser
 
-### Frontend Setup
-1. **Open `index.html`** in your web browser
-2. **Or serve with a local server**
-Python 3
+Or serve via a local server:
+
+bash
 python -m http.server 8000
-Then visit: http://localhost:8000
+Navigate to http://localhost:8000 in your browser
 
-## Usage
+Usage
+Demo Account
+Email: demo@financetracker.com
 
-### Demo Account
-- **Email:** demo@financetracker.com
-- **Password:** demo123
+Password: demo123
 
-### Adding Transactions
-1. Login to your account
-2. Fill in the "Add Transaction" form
-3. Select income or expense type
-4. Choose appropriate category
-5. Click "Add Transaction"
+Adding Transactions
+Login to your account
 
-### Viewing Analytics
-- Dashboard shows total income, expenses, and savings rate
-- Spending overview chart displays expense breakdown by category
-- Filter transactions by type, category, or date
+Fill in the "Add Transaction" form
 
-## API Endpoints
+Select income or expense type
 
-| Method | Endpoint | Description |
-|--------|----------|-------------|
-| GET | `/health` | Health check |
-| POST | `/login` | User authentication |
-| POST | `/register` | User registration |
-| GET | `/transactions/<user_id>` | Get user transactions |
-| POST | `/transactions/<user_id>` | Add new transaction |
-| DELETE | `/transactions/<user_id>?id=<id>` | Delete transaction |
-| GET | `/categories` | Get available categories |
+Choose appropriate category
 
-## Project Structure
+Click "Add Transaction"
+
+Viewing Analytics
+Dashboard shows total income, expenses, net balance, and savings rate
+
+Spending overview chart displays expense breakdown by category
+
+Filter transactions by type, category, or date range
+
+API Endpoints
+Method	Endpoint	Description
+GET	/health	Backend health check
+POST	/login	User login
+POST	/register	User registration
+GET	/transactions/<user_id>	Fetch transactions for user
+POST	/transactions/<user_id>	Add transaction
+DELETE	/transactions/<user_id>?id=<id>	Delete transaction
+GET	/categories	Fetch available categories
+Project Structure
+text
 personal-finance-tracker/
-├── app.py # Flask backend
-├── index.html # Frontend HTML
-├── styles.css # CSS styling
-├── app.js # JavaScript logic
-├── requirements.txt # Python dependencies
-├── README.md # Documentation
-├── .gitignore # Git ignore rules
-└── finance_tracker.db # SQLite database (auto-generated)
+├── app.py                 # Flask backend application  
+├── index.html             # Frontend HTML  
+├── style.css              # CSS styling  
+├── app.js                 # Frontend JavaScript logic  
+├── requirements.txt       # Python dependencies  
+├── README.md              # Project documentation  
+├── .gitignore             # Git ignore rules  
+└── finance_tracker.db     # SQLite database (auto-generated)  
+Browser Compatibility
+Chrome 80+
 
-## Features in Detail
+Firefox 75+
 
-### Real-time Statistics
-- **Total Income:** Sum of all income transactions
-- **Total Expenses:** Sum of all expense transactions  
-- **Net Balance:** Income minus expenses
-- **Savings Rate:** Percentage of income saved
+Safari 13+
 
-### Transaction Categories
+Edge 80+
 
-**Income Categories:**
-- Salary, Freelance, Investment, Gift, Other Income
+Contributing
+Fork the repository
 
-**Expense Categories:**
-- Food, Transportation, Utilities, Entertainment, Healthcare, Shopping, Rent, Other
+Create your feature branch (git checkout -b feature/AmazingFeature)
 
-### Responsive Design
-- Mobile-first approach
-- Tablet and desktop optimized
-- Touch-friendly interface
-- Accessible design principles
+Commit your changes (git commit -m 'Add some AmazingFeature')
 
-## Browser Compatibility
-- Chrome 80+
-- Firefox 75+
-- Safari 13+
-- Edge 80+
+Push to the branch (git push origin feature/AmazingFeature)
 
-## Contributing
-1. Fork the repository
-2. Create your feature branch (`git checkout -b feature/AmazingFeature`)
-3. Commit your changes (`git commit -m 'Add some AmazingFeature'`)
-4. Push to the branch (`git push origin feature/AmazingFeature`)
-5. Open a Pull Request
+Open a Pull Request
 
-## License
-This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.
+License
+This project is licensed under the MIT License. See the LICENSE file for details.
 
-## Acknowledgments
-- Chart.js for beautiful data visualization
-- Flask community for excellent documentation
-- Material Design for UI inspiration
+Acknowledgments
+Chart.js for beautiful data visualization
 
-## Contact
-**Mustafa** - [Your Email]
-- GitHub: [@yourusername](https://github.com/yourusername)
-- Project Link: [https://github.com/yourusername/personal-finance-tracker](https://github.com/yourusername/personal-finance-tracker)
+Flask community for excellent documentation
 
----
+Material Design for UI inspiration
 
-**Built with ❤️ by Mustafa** - Computer Science Student, Mumbai University
