@@ -1,4 +1,5 @@
 Personal Finance Tracker
+
 A comprehensive web application for managing personal finances with real-time data visualization, transaction management, and user authentication.
 
 Features
