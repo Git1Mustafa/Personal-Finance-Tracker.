@@ -1,183 +1,190 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Personal Finance Tracker</title>
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.0/chart.min.js"></script>
-    <link rel="stylesheet" href="styles.css">
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+    <title>Personal Finance Tracker</title>
+
+    <!-- Chart.js -->
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+
+    <!-- CSS -->
+    <link rel="stylesheet" href="style.css" />
 </head>
 <body>
-    <!-- Loading Screen -->
-    <div id="loadingScreen" class="loading-container">
-        <div class="spinner"></div>
-        <div class="loading-text">Connecting to backend...</div>
-    </div>
+    <!-- Loading Screen -->
+    <div id="loadingScreen" class="loading-container">
+        <div class="spinner"></div>
+        <div class="loading-text">Connecting to backend...</div>
+    </div>
 
-    <!-- Login Page -->
-    <div id="loginPage" class="login-container hidden">
-        <div class="login-header">
-            <h1>💰 Finance Tracker</h1>
-            <p>Secure access to your financial data</p>
-        </div>
+    <!-- Login Page -->
+    <div id="loginPage" class="login-container hidden">
+        <div class="login-header">
+            <h1>💰 Finance Tracker</h1>
+            <p>Secure access to your financial data</p>
+        </div>
 
-        <div class="login-form">
-            <div class="auth-tabs">
-                <button class="auth-tab active" onclick="switchTab('login')">Login</button>
-                <button class="auth-tab" onclick="switchTab('register')">Register</button>
-            </div>
+        <div class="login-form">
+            <div class="auth-tabs">
+                <button class="auth-tab active" onclick="switchTab('login')">Login</button>
+                <button class="auth-tab" onclick="switchTab('register')">Register</button>
+            </div>
 
-            <div id="errorMessage" class="error-message"></div>
-            <div id="successMessage" class="success-message"></div>
+            <div id="errorMessage" class="error-message"></div>
+            <div id="successMessage" class="success-message"></div>
 
-            <!-- Login Form -->
-            <form id="loginForm">
-                <div class="form-group">
-                    <label for="loginEmail">Email Address</label>
-                    <input type="email" id="loginEmail" required value="demo@financetracker.com">
-                </div>
-                <div class="form-group">
-                    <label for="loginPassword">Password</label>
-                    <input type="password" id="loginPassword" required value="demo123">
-                </div>
-                <button type="submit" class="btn-login">Sign In</button>
-            </form>
+            <!-- Login Form -->
+            <form id="loginForm">
+                <div class="form-group">
+                    <label for="loginEmail">Email Address</label>
+                    <input type="email" id="loginEmail" required value="demo@financetracker.com" />
+                </div>
+                <div class="form-group">
+                    <label for="loginPassword">Password</label>
+                    <input type="password" id="loginPassword" required value="demo123" />
+                </div>
+                <button type="submit" class="btn-login">Sign In</button>
+            </form>
 
-            <!-- Register Form -->
-            <form id="registerForm" class="hidden">
-                <div class="form-group">
-                    <label for="registerName">Full Name</label>
-                    <input type="text" id="registerName" required>
-                </div>
-                <div class="form-group">
-                    <label for="registerEmail">Email Address</label>
-                    <input type="email" id="registerEmail" required>
-                </div>
-                <div class="form-group">
-                    <label for="registerPassword">Password</label>
-                    <input type="password" id="registerPassword" required minlength="6">
-                </div>
-                <div class="form-group">
-                    <label for="confirmPassword">Confirm Password</label>
-                    <input type="password" id="confirmPassword" required>
-                </div>
-                <button type="submit" class="btn-login">Create Account</button>
-            </form>
+            <!-- Register Form -->
+            <form id="registerForm" class="hidden">
+                <div class="form-group">
+                    <label for="registerName">Full Name</label>
+                    <input type="text" id="registerName" required />
+                </div>
+                <div class="form-group">
+                    <label for="registerEmail">Email Address</label>
+                    <input type="email" id="registerEmail" required />
+                </div>
+                <div class="form-group">
+                    <label for="registerPassword">Password</label>
+                    <input type="password" id="registerPassword" required minlength="6" />
+                </div>
+                <div class="form-group">
+                    <label for="confirmPassword">Confirm Password</label>
+                    <input type="password" id="confirmPassword" required />
+                </div>
+                <button type="submit" class="btn-login">Create Account</button>
+            </form>
 
-            <div class="demo-credentials">
-                <h4>📝 Demo Credentials</h4>
-                <p><strong>Email:</strong> demo@financetracker.com</p>
-                <p><strong>Password:</strong> demo123</p>
-                <p><em>Or register to create your own account!</em></p>
-            </div>
-        </div>
-    </div>
+            <div class="demo-credentials">
+                <h4>📝 Demo Credentials</h4>
+                <p><strong>Email:</strong> demo@financetracker.com</p>
+                <p><strong>Password:</strong> demo123</p>
+                <p><em>Or register to create your own account!</em></p>
+            </div>
+        </div>
+    </div>
 
-    <!-- Main App -->
-    <div id="mainApp" class="app-container">
-        <div class="container">
-            <div class="app-header">
-                <h1>💰 Personal Finance Tracker</h1>
-                <div class="user-info">
-                    <span class="user-welcome" id="userWelcome">Welcome!</span>
-                    <button class="btn-logout" onclick="logout()">Logout</button>
-                </div>
-            </div>
+    <!-- Main App -->
+    <div id="mainApp" class="app-container">
+        <div class="container">
+            <div class="app-header">
+                <h1>💰 Personal Finance Tracker</h1>
+                <div class="user-info">
+                    <span class="user-welcome" id="userWelcome">Welcome!</span>
+                    <button class="btn-logout" onclick="logout()">Logout</button>
+                </div>
+            </div>
 
-            <div class="stats-grid">
-                <div class="stat-card">
-                    <div class="stat-value income" id="totalIncome">$0.00</div>
-                    <div class="stat-label">Total Income</div>
-                </div>
-                <div class="stat-card">
-                    <div class="stat-value expenses" id="totalExpenses">$0.00</div>
-                    <div class="stat-label">Total Expenses</div>
-                </div>
-                <div class="stat-card">
-                    <div class="stat-value balance" id="netBalance">$0.00</div>
-                    <div class="stat-label">Net Balance</div>
-                </div>
-                <div class="stat-card">
-                    <div class="stat-value savings" id="savingsRate">0%</div>
-                    <div class="stat-label">Savings Rate</div>
-                </div>
-            </div>
+            <div class="stats-grid">
+                <div class="stat-card">
+                    <div class="stat-value income" id="totalIncome">$0.00</div>
+                    <div class="stat-label">Total Income</div>
+                </div>
+                <div class="stat-card">
+                    <div class="stat-value expenses" id="totalExpenses">$0.00</div>
+                    <div class="stat-label">Total Expenses</div>
+                </div>
+                <div class="stat-card">
+                    <div class="stat-value balance" id="netBalance">$0.00</div>
+                    <div class="stat-label">Net Balance</div>
+                </div>
+                <div class="stat-card">
+                    <div class="stat-value savings" id="savingsRate">0%</div>
+                    <div class="stat-label">Savings Rate</div>
+                </div>
+            </div>
 
-            <div class="main-content">
-                <div class="transactions-section">
-                    <h2 class="section-title">📋 Recent Transactions</h2>
-                    <div class="transaction-list" id="transactionList">
-                        <div class="no-transactions">
-                            No transactions yet. Add your first transaction to get started!
-                        </div>
+            <div class="main-content">
+                <div class="transactions-section">
+                    <h2 class="section-title">📋 Recent Transactions</h2>
+                    <div class="transaction-list" id="transactionList">
+                        <div class="no-transactions">No transactions yet. Add your first transaction to get started!</div>
+                    </div>
+                </div>
+
+                <div class="sidebar">
+                    <div class="add-transaction">
+                        <h2 class="section-title">➕ Add Transaction</h2>
+                        <form id="transactionForm">
+                            <div class="form-group">
+                                <label for="description">Description</label>
+                                <input type="text" id="description" required />
+                            </div>
+                            <div class="form-group">
+                                <label for="amount">Amount ($)</label>
+                                <input type="number" id="amount" step="0.01" required />
+                            </div>
+                            <div class="form-group">
+                                <label for="type">Type</label>
+                                <select id="type" required>
+                                    <option value="">Select Type</option>
+                                    <option value="income">Income</option>
+                                    <option value="expense">Expense</option>
+                                </select>
+                            </div>
+                            <div class="form-group">
+                                <label for="category">Category</label>
+                                <select id="category" required>
+                                    <option value="">Select Category</option>
+                                </select>
+                            </div>
+                            <div class="form-group">
+                                <label for="date">Date</label>
+                                <input type="date" id="date" required />
+                            </div>
+                            <button type="submit" class="btn">Add Transaction</button>
+                        </form>
+                    </div>
+
+                    <div class="filters">
+                        <h2 class="section-title">🔍 Filters</h2>
+                        <div class="filter-group">
+                            <select id="filterType">
+                                <option value="">All Types</option>
+                                <option value="income">Income</option>
+                                <option value="expense">Expense</option>
+                            </select>
+                            <select id="filterCategory">
+                                <option value="">All Categories</option>
+                            </select>
+                        </div>
+                    <div class="form-group">
+                        <label for="filterDateFrom">From Date</label>
+                        <input type="date" id="filterDateFrom" />
                     </div>
-                </div>
-
-                <div class="sidebar">
-                    <div class="add-transaction">
-                        <h2 class="section-title">➕ Add Transaction</h2>
-                        <form id="transactionForm">
-                            <div class="form-group">
-                                <label for="description">Description</label>
-                                <input type="text" id="description" required>
-                            </div>
-                            <div class="form-group">
-                                <label for="amount">Amount ($)</label>
-                                <input type="number" id="amount" step="0.01" required>
-                            </div>
-                            <div class="form-group">
-                                <label for="type">Type</label>
-                                <select id="type" required>
-                                    <option value="">Select Type</option>
-                                    <option value="income">Income</option>
-                                    <option value="expense">Expense</option>
-                                </select>
-                            </div>
-                            <div class="form-group">
-                                <label for="category">Category</label>
-                                <select id="category" required>
-                                    <option value="">Select Category</option>
-                                </select>
-                            </div>
-                            <div class="form-group">
-                                <label for="date">Date</label>
-                                <input type="date" id="date" required>
-                            </div>
-                            <button type="submit" class="btn">Add Transaction</button>
-                        </form>
+                    <div class="form-group">
+                        <label for="filterDateTo">To Date</label>
+                        <input type="date" id="filterDateTo" />
                     </div>
+                        <button class="btn" onclick="clearFilters()">Clear Filters</button>
+                    </div>
 
-                    <div class="filters">
-                        <h2 class="section-title">🔍 Filters</h2>
-                        <div class="filter-group">
-                            <select id="filterType">
-                                <option value="">All Types</option>
-                                <option value="income">Income</option>
-                                <option value="expense">Expense</option>
-                            </select>
-                            <select id="filterCategory">
-                                <option value="">All Categories</option>
-                            </select>
-                        </div>
-                        <div class="form-group">
-                            <label for="filterDate">Month</label>
-                            <input type="month" id="filterDate">
-                        </div>
-                        <button class="btn" onclick="clearFilters()">Clear Filters</button>
-                    </div>
+                    <div class="charts">
+                        <h2 class="section-title">📊 Spending Overview</h2>
+                        <div class="chart-container">
+                            <canvas id="expenseChart"></canvas>
+                            <div id="chartMessage" class="chart-message">Add some expense transactions to see chart data</div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
 
-                    <div class="charts">
-                        <h2 class="section-title">📊 Spending Overview</h2>
-                        <div class="chart-container">
-                            <canvas id="expenseChart"></canvas>
-                        </div>
-                        <div id="chartMessage" class="chart-message">Add some expense transactions to see chart data</div>
-                    </div>
-                </div>
-            </div>
-        </div>
-    </div>
-
-    <script src="app.js"></script>
+    <!-- App JS -->
+    <script src="app.js"></script>
 </body>
 </html>
