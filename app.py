@@ -232,6 +232,14 @@ def internal_error(error):
     db.session.rollback()
     return jsonify({"error":"Internal server error"}), 500
 
+@app.route("/")
+def serve_frontend():
+    return send_from_directory(".", "index.html")
+
+@app.route("/<path:path>")
+def serve_static(path):
+    return send_from_directory(".", path)
+
 create_tables()
 if __name__ == "__main__":
     print("🚀 Personal Finance Tracker Backend (SQLite)")
