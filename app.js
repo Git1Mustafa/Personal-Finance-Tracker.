@@ -2,117 +2,109 @@ const API_BASE = window.location.origin;
 
 let currentUser = null;
 let financeApp = null;
-let connectionStatus = 'checking';
 let chartInstance = null;
 
 document.addEventListener('DOMContentLoaded', () => {
     document.getElementById('loginPage').classList.remove('hidden');
     document.getElementById('mainApp').style.display = 'none';
-    checkBackendConnection();
-    setupFormListeners();
+    initApp();
 });
 
-async function checkBackendConnection() {
-    const controller = new AbortController();
-    const timeout = setTimeout(() => controller.abort(), 5000);
+async function initApp() {
+    const saved = localStorage.getItem('ft_user');
+    if (saved) {
+        try {
+            currentUser = JSON.parse(saved);
+            // Verify the session is still valid by pinging the backend
+            await verifyBackend();
+            showMainApp();
+        } catch {
+            localStorage.removeItem('ft_user');
+            hideLoading();
+        }
+    } else {
+        await verifyBackend();
+        hideLoading();
+    }
+    setupFormListeners();
+}
+
+async function verifyBackend() {
+    const loading = document.getElementById('loadingScreen');
     try {
+        const controller = new AbortController();
+        const timeout = setTimeout(() => controller.abort(), 6000);
         const res = await fetch(`${API_BASE}/health`, { signal: controller.signal });
         clearTimeout(timeout);
-        connectionStatus = res.ok ? 'connected' : 'disconnected';
+        if (!res.ok) throw new Error('Backend unhealthy');
     } catch {
-        connectionStatus = 'disconnected';
+        // Backend is unreachable — show a non-blocking warning after load
+        scheduleOfflineWarning();
     }
-    hideLoading();
+}
+
+function scheduleOfflineWarning() {
+    // Show warning after UI is visible
+    setTimeout(() => {
+        showBanner('Unable to reach the backend server. Please try again later.', 'error');
+    }, 600);
 }
 
 function hideLoading() {
     const loading = document.getElementById('loadingScreen');
     if (loading) loading.classList.add('hidden');
-    const badge = document.createElement('div');
-    badge.className = `connection-status ${connectionStatus}`;
-    badge.textContent = connectionStatus === 'connected' ? 'Backend Connected' : 'Offline Mode';
-    document.body.appendChild(badge);
-
-    const saved = localStorage.getItem('ft_user');
-    if (saved) {
-        try {
-            currentUser = JSON.parse(saved);
-            showMainApp();
-        } catch { localStorage.removeItem('ft_user'); }
-    }
 }
+
+// ─── Core API ────────────────────────────────────────────────────────────────
 
 async function apiRequest(url, method = 'GET', body = null) {
-    if (connectionStatus === 'connected') {
-        try {
-            const options = { method, headers: { 'Content-Type': 'application/json' } };
-            if (body) options.body = JSON.stringify(body);
-            const res = await fetch(API_BASE + url, options);
-            const data = await res.json().catch(() => ({}));
-            if (!res.ok) throw new Error(data.error || `HTTP ${res.status}`);
-            return data;
-        } catch (err) {
-            connectionStatus = 'disconnected';
-            return handleMockRequest(url, method, body);
-        }
-    }
-    return handleMockRequest(url, method, body);
-}
-
-function handleMockRequest(url, method, body) {
-    const mock = getMockData();
-    if (url === '/login' && method === 'POST') {
-        const { email, password } = body || {};
-        if (email === 'demo@financetracker.com' && password === 'demo123')
-            return { id: '1', name: 'Demo User', email };
-        throw new Error('Invalid credentials');
-    }
-    if (url === '/register' && method === 'POST') return { message: 'Registered (offline mode)' };
-    if (url.startsWith('/transactions/') && method === 'GET') return mock.transactions;
-    if (url.startsWith('/transactions/') && method === 'POST') {
-        const t = { id: Date.now().toString(), user_id: '1', ...body, timestamp: new Date().toISOString() };
-        mock.transactions.unshift(t);
-        return t;
-    }
-    if (url.startsWith('/transactions/') && method === 'DELETE') {
-        const id = new URLSearchParams(url.split('?')[1] || '').get('id');
-        const i = mock.transactions.findIndex(t => t.id === id);
-        if (i >= 0) { mock.transactions.splice(i, 1); return { message: 'Deleted' }; }
-        throw new Error('Not found');
-    }
-    if (url === '/categories') return {
-        income: ['Salary','Freelance','Investment','Gift','Business','Other Income'],
-        expense: ['Food','Transportation','Utilities','Entertainment','Healthcare','Shopping','Rent','Education','Other']
+    const options = {
+        method,
+        headers: { 'Content-Type': 'application/json' }
     };
-    throw new Error('Mock endpoint not found');
+    if (body) options.body = JSON.stringify(body);
+
+    let res;
+    try {
+        const controller = new AbortController();
+        const timeout = setTimeout(() => controller.abort(), 10000);
+        res = await fetch(API_BASE + url, { ...options, signal: controller.signal });
+        clearTimeout(timeout);
+    } catch (err) {
+        if (err.name === 'AbortError') {
+            throw new Error('Request timed out. Please check your connection.');
+        }
+        throw new Error('Backend is offline. Please try again later.');
+    }
+
+    let data;
+    try {
+        data = await res.json();
+    } catch {
+        throw new Error(`Unexpected server response (HTTP ${res.status}).`);
+    }
+
+    if (!res.ok) {
+        throw new Error(data.error || `Request failed (HTTP ${res.status}).`);
+    }
+
+    return data;
 }
 
-function getMockData() {
-    if (!window.mockData) {
-        window.mockData = {
-            transactions: [
-                { id:'1', user_id:'1', description:'Monthly Salary', amount:50000, type:'income', category:'Salary', date:'2025-09-01', timestamp: new Date().toISOString() },
-                { id:'2', user_id:'1', description:'Grocery Shopping', amount:2500, type:'expense', category:'Food', date:'2025-09-02', timestamp: new Date().toISOString() },
-                { id:'3', user_id:'1', description:'Electricity Bill', amount:1200, type:'expense', category:'Utilities', date:'2025-09-01', timestamp: new Date().toISOString() },
-                { id:'4', user_id:'1', description:'Coffee Shop', amount:350, type:'expense', category:'Food', date:'2025-09-02', timestamp: new Date().toISOString() },
-                { id:'5', user_id:'1', description:'Freelance Project', amount:15000, type:'income', category:'Freelance', date:'2025-08-30', timestamp: new Date().toISOString() }
-            ]
-        };
-    }
-    return window.mockData;
-}
+// ─── Auth ─────────────────────────────────────────────────────────────────────
 
 function showError(msg) {
     const el = document.getElementById('errorMessage');
     el.textContent = msg;
     el.style.display = 'block';
-    setTimeout(() => { el.style.display = 'none'; }, 5000);
+    setTimeout(() => { el.style.display = 'none'; }, 6000);
 }
+
 function showSuccess(msg) {
     const el = document.getElementById('successMessage');
     el.textContent = msg;
     el.style.display = 'block';
-    setTimeout(() => { el.style.display = 'none'; }, 4000);
+    setTimeout(() => { el.style.display = 'none'; }, 5000);
 }
 
 function setupFormListeners() {
@@ -124,13 +116,24 @@ function setupFormListeners() {
 async function handleLogin() {
     const email = document.getElementById('loginEmail').value.trim();
     const password = document.getElementById('loginPassword').value;
-    if (!email || !password) { showError('Please enter both email and password'); return; }
+    if (!email || !password) { showError('Please enter both email and password.'); return; }
+
+    const btn = document.querySelector('#loginForm .btn-login');
+    btn.disabled = true;
+    btn.textContent = 'Signing in…';
+
     try {
         const user = await apiRequest('/login', 'POST', { email, password });
         currentUser = user;
         localStorage.setItem('ft_user', JSON.stringify(user));
+        hideLoading();
         showMainApp();
-    } catch (err) { showError(err.message || 'Login failed'); }
+    } catch (err) {
+        showError(err.message || 'Login failed. Please try again.');
+    } finally {
+        btn.disabled = false;
+        btn.textContent = 'Sign In';
+    }
 }
 
 async function handleRegister() {
@@ -140,15 +143,36 @@ async function handleRegister() {
         password: document.getElementById('registerPassword').value,
         confirmPassword: document.getElementById('confirmPassword').value
     };
-    if (!userData.name || !userData.email || !userData.password) { showError('Please fill in all fields'); return; }
-    if (userData.password !== userData.confirmPassword) { showError('Passwords do not match'); return; }
-    if (userData.password.length < 6) { showError('Password must be at least 6 characters'); return; }
+
+    if (!userData.name || !userData.email || !userData.password) {
+        showError('Please fill in all fields.');
+        return;
+    }
+    if (userData.password !== userData.confirmPassword) {
+        showError('Passwords do not match.');
+        return;
+    }
+    if (userData.password.length < 6) {
+        showError('Password must be at least 6 characters.');
+        return;
+    }
+
+    const btn = document.querySelector('#registerForm .btn-login');
+    btn.disabled = true;
+    btn.textContent = 'Creating account…';
+
     try {
         await apiRequest('/register', 'POST', userData);
         showSuccess('Account created! Please sign in.');
         switchTab('login');
         document.getElementById('loginEmail').value = userData.email;
-    } catch (err) { showError(err.message || 'Registration failed'); }
+        document.getElementById('registerForm').reset();
+    } catch (err) {
+        showError(err.message || 'Registration failed. Please try again.');
+    } finally {
+        btn.disabled = false;
+        btn.textContent = 'Create Account';
+    }
 }
 
 function switchTab(tab) {
@@ -165,12 +189,13 @@ function showTab(name) {
     document.querySelectorAll('.tab-content').forEach(el => el.classList.remove('active'));
     document.querySelectorAll('.tab-btn').forEach(btn => btn.classList.remove('active'));
     document.getElementById(`tab-${name}`).classList.add('active');
-    document.querySelectorAll('.tab-btn')[['dashboard','add','history'].indexOf(name)].classList.add('active');
+    document.querySelectorAll('.tab-btn')[['dashboard', 'add', 'history'].indexOf(name)].classList.add('active');
     if (financeApp) financeApp.updateDisplay();
 }
 
 function logout() {
-    currentUser = null; financeApp = null;
+    currentUser = null;
+    financeApp = null;
     localStorage.removeItem('ft_user');
     document.getElementById('mainApp').style.display = 'none';
     document.getElementById('loginPage').style.display = 'block';
@@ -180,10 +205,11 @@ function logout() {
 }
 
 function showMainApp() {
+    hideLoading();
     document.getElementById('loginPage').style.display = 'none';
     document.getElementById('mainApp').style.display = 'block';
-    const welcomeEl = document.getElementById('userWelcome');
-    welcomeEl.textContent = `Welcome, ${currentUser.name}!`;
+    document.getElementById('userWelcome').textContent = `Welcome, ${currentUser.name}!`;
+
     if (!financeApp) {
         financeApp = new FinanceApp(currentUser);
         window.financeApp = financeApp;
@@ -193,19 +219,35 @@ function showMainApp() {
 }
 
 function clearFilters() {
-    ['filterType','filterCategory','filterDateFrom','filterDateTo'].forEach(id => {
+    ['filterType', 'filterCategory', 'filterDateFrom', 'filterDateTo'].forEach(id => {
         document.getElementById(id).value = '';
     });
     if (financeApp) financeApp.updateDisplay();
 }
+
+// ─── Banner notification (top of screen) ─────────────────────────────────────
+
+function showBanner(message, type = 'info') {
+    // Remove any existing banner
+    document.querySelectorAll('.banner-notification').forEach(el => el.remove());
+
+    const banner = document.createElement('div');
+    banner.className = `banner-notification ${type}`;
+    banner.innerHTML = `<span>${message}</span><button onclick="this.parentElement.remove()" aria-label="Dismiss">✕</button>`;
+    document.body.prepend(banner);
+
+    setTimeout(() => banner.remove(), 8000);
+}
+
+// ─── FinanceApp class ─────────────────────────────────────────────────────────
 
 class FinanceApp {
     constructor(user) {
         this.user = user;
         this.allTransactions = [];
         this.categories = {
-            income: ['Salary','Freelance','Investment','Gift','Business','Other Income'],
-            expense: ['Food','Transportation','Utilities','Entertainment','Healthcare','Shopping','Rent','Education','Other']
+            income: ['Salary', 'Freelance', 'Investment', 'Gift', 'Business', 'Other Income'],
+            expense: ['Food', 'Transportation', 'Utilities', 'Entertainment', 'Healthcare', 'Shopping', 'Rent', 'Education', 'Other']
         };
         this.initializeApp();
     }
@@ -227,9 +269,9 @@ class FinanceApp {
         try {
             const tx = await apiRequest(`/transactions/${this.user.id}`, 'GET');
             this.allTransactions = Array.isArray(tx) ? tx : [];
-        } catch {
+        } catch (err) {
             this.allTransactions = [];
-            this.showNotification('Failed to load transactions', 'error');
+            this.showNotification(err.message || 'Failed to load transactions.', 'error');
         }
     }
 
@@ -241,16 +283,23 @@ class FinanceApp {
         const date = document.getElementById('date').value;
 
         if (!description || !amountStr || !type || !category || !date) {
-            this.showNotification('Please fill in all fields', 'error'); return;
+            this.showNotification('Please fill in all fields.', 'error');
+            return;
         }
 
         const amount = parseFloat(amountStr);
         if (isNaN(amount) || amount <= 0) {
-            this.showNotification('Amount must be a positive number', 'error'); return;
+            this.showNotification('Amount must be a positive number.', 'error');
+            return;
         }
         if (amount > 10000000) {
-            this.showNotification('Amount cannot exceed ₹1,00,00,000', 'error'); return;
+            this.showNotification('Amount cannot exceed ₹1,00,00,000.', 'error');
+            return;
         }
+
+        const btn = document.querySelector('#transactionForm .btn-primary');
+        btn.disabled = true;
+        btn.textContent = 'Saving…';
 
         try {
             const newTx = await apiRequest(`/transactions/${this.user.id}`, 'POST', { description, amount, type, category, date });
@@ -259,7 +308,12 @@ class FinanceApp {
             this.updateDisplay();
             this.showNotification('Transaction added!', 'success');
             showTab('dashboard');
-        } catch (err) { this.showNotification(err.message || 'Failed', 'error'); }
+        } catch (err) {
+            this.showNotification(err.message || 'Failed to add transaction.', 'error');
+        } finally {
+            btn.disabled = false;
+            btn.textContent = 'Add Transaction';
+        }
     }
 
     clearForm() {
@@ -274,8 +328,10 @@ class FinanceApp {
             await apiRequest(`/transactions/${this.user.id}?id=${id}`, 'DELETE');
             this.allTransactions = this.allTransactions.filter(t => t.id !== id);
             this.updateDisplay();
-            this.showNotification('Transaction deleted', 'success');
-        } catch (err) { this.showNotification(err.message || 'Failed to delete', 'error'); }
+            this.showNotification('Transaction deleted.', 'success');
+        } catch (err) {
+            this.showNotification(err.message || 'Failed to delete transaction.', 'error');
+        }
     }
 
     populateCategories(type = null) {
@@ -284,8 +340,9 @@ class FinanceApp {
         if (!catSelect) return;
 
         catSelect.innerHTML = '<option value="">Select Category</option>';
-        const list = type && this.categories[type] ? this.categories[type] :
-            [...this.categories.income, ...this.categories.expense];
+        const list = type && this.categories[type]
+            ? this.categories[type]
+            : [...this.categories.income, ...this.categories.expense];
         list.forEach(cat => {
             const opt = document.createElement('option');
             opt.value = cat; opt.textContent = cat;
@@ -325,8 +382,8 @@ class FinanceApp {
     }
 
     renderStats(transactions) {
-        const income = transactions.filter(t => t.type === 'income').reduce((s,t) => s + t.amount, 0);
-        const expenses = transactions.filter(t => t.type === 'expense').reduce((s,t) => s + t.amount, 0);
+        const income = transactions.filter(t => t.type === 'income').reduce((s, t) => s + t.amount, 0);
+        const expenses = transactions.filter(t => t.type === 'expense').reduce((s, t) => s + t.amount, 0);
         const balance = income - expenses;
         const savingsRate = income > 0 ? (balance / income) * 100 : 0;
 
@@ -341,8 +398,7 @@ class FinanceApp {
     renderRecentTransactions() {
         const list = document.getElementById('recentTransactionList');
         if (!list) return;
-        const recent = this.allTransactions.slice(0, 5);
-        this.renderToList(list, recent);
+        this.renderToList(list, this.allTransactions.slice(0, 5));
     }
 
     renderTransactions(transactions) {
@@ -358,7 +414,7 @@ class FinanceApp {
         }
         container.innerHTML = '';
         [...transactions]
-            .sort((a,b) => new Date(b.date) - new Date(a.date))
+            .sort((a, b) => new Date(b.date) - new Date(a.date))
             .forEach(t => {
                 const item = document.createElement('div');
                 item.className = 'transaction-item';
@@ -367,7 +423,7 @@ class FinanceApp {
 
                 const desc = document.createElement('div');
                 desc.className = 'transaction-description';
-                desc.textContent = t.description; // XSS safe: textContent not innerHTML
+                desc.textContent = t.description; // XSS-safe
 
                 const details = document.createElement('div');
                 details.className = 'transaction-details';
@@ -421,20 +477,22 @@ class FinanceApp {
                 labels,
                 datasets: [{
                     data,
-                    backgroundColor: ['#4CAF50','#2196F3','#FF9800','#f44336','#9C27B0','#00BCD4','#FF5722','#607D8B','#8BC34A'],
-                    borderWidth: 2, borderColor: '#fff'
+                    backgroundColor: ['#4CAF50', '#2196F3', '#FF9800', '#f44336', '#9C27B0', '#00BCD4', '#FF5722', '#607D8B', '#8BC34A'],
+                    borderWidth: 2,
+                    borderColor: '#fff'
                 }]
             },
             options: {
-                responsive: true, maintainAspectRatio: false,
+                responsive: true,
+                maintainAspectRatio: false,
                 plugins: {
                     legend: { position: 'bottom', labels: { font: { size: 11 }, padding: 12 } },
                     tooltip: {
                         callbacks: {
                             label: (ctx) => {
                                 const val = ctx.parsed;
-                                const total = ctx.dataset.data.reduce((a,b) => a+b, 0);
-                                const pct = total > 0 ? ((val/total)*100).toFixed(1) : 0;
+                                const total = ctx.dataset.data.reduce((a, b) => a + b, 0);
+                                const pct = total > 0 ? ((val / total) * 100).toFixed(1) : 0;
                                 return ` ${ctx.label}: ${this.formatINR(val)} (${pct}%)`;
                             }
                         }
@@ -450,8 +508,9 @@ class FinanceApp {
 
     formatDate(dateStr) {
         if (!dateStr) return '';
-        try { return new Date(dateStr).toLocaleDateString('en-IN', { year:'numeric', month:'short', day:'numeric' }); }
-        catch { return dateStr; }
+        try {
+            return new Date(dateStr + 'T00:00:00').toLocaleDateString('en-IN', { year: 'numeric', month: 'short', day: 'numeric' });
+        } catch { return dateStr; }
     }
 
     showNotification(message, type = 'info') {
@@ -459,10 +518,11 @@ class FinanceApp {
         n.className = `notification ${type}`;
         n.textContent = message;
         document.body.appendChild(n);
-        setTimeout(() => n.remove(), 3000);
+        setTimeout(() => n.remove(), 3500);
     }
 }
 
+// ─── Globals ──────────────────────────────────────────────────────────────────
 window.switchTab = switchTab;
 window.showTab = showTab;
 window.logout = logout;
